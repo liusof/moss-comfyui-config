@@ -1,51 +1,37 @@
-# ComfyUI + MOSS-Image 快照（开箱即用）
+# moss-comfyui-config
 
-ComfyUI `0.42.0`（commit `bc5f880`）+ MOSS-Image 量化权重配置，适配 8GB 显存笔记本。
-解压后跑一条命令即可完成环境安装与模型下载，无需手工改任何配置。
+ComfyUI `0.42.0`（commit `bc5f880`）+ MOSS-Image 量化权重的完整配置仓库，8GB 显存笔记本实测可用。
+`git clone` 下来就是完整源码树，跑一条命令完成环境与模型，最后双击桌面图标启动。
 
-## 三步搞定
-
-**1. 下载**（把 `<TOKEN>` 换成你的 GitHub PAT）
+## 三行命令
 
 ```powershell
-Invoke-WebRequest -Uri "https://api.github.com/repos/liusof/moss-comfyui-config/contents/ComfyUI-MOSS-Image-snapshot.zip" `
-  -Headers @{ Authorization = "token <TOKEN>"; Accept = "application/vnd.github.raw" } `
-  -OutFile ComfyUI-MOSS-Image-snapshot.zip
-```
-
-```bash
-curl -L -H "Authorization: token <TOKEN>" -H "Accept: application/vnd.github.raw" \
-  -o ComfyUI-MOSS-Image-snapshot.zip \
-  https://api.github.com/repos/liusof/moss-comfyui-config/contents/ComfyUI-MOSS-Image-snapshot.zip
-```
-
-**2. 解压**
-
-```powershell
-Expand-Archive .\ComfyUI-MOSS-Image-snapshot.zip -DestinationPath D:\Programs\ComfyUI
-```
-
-**3. 一键部署**
-
-```powershell
-cd D:\Programs\ComfyUI
-.\一键部署.bat
-```
-
-等价命令行：
-
-```powershell
+git clone https://github.com/liusof/moss-comfyui-config.git
+cd moss-comfyui-config
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
-脚本会自动：建 Python 3.11 虚拟环境 → 装 PyTorch 2.14.1+cu130 → 装 `requirements.txt` → 从 hf-mirror 下载三个权重（12.1GB，断点续传，可中断重跑）。
+私有库需要认证：把 URL 换成 `https://<用户名>:<PAT>@github.com/liusof/moss-comfyui-config.git`，或先加为协作者。
 
-- 只要环境和代码、暂不下模型：`.\一键部署.bat` 无法传参，改用 `powershell -ExecutionPolicy Bypass -File .\setup.ps1 -SkipModels`
-- 前置条件：本机已装 Python 3.11（安装时勾选 Add to PATH），Windows 10 1803+ 自带的 `curl.exe`
+执行完会：
 
-## 手动下载模型（命令行）
+1. 建 Python 3.11 虚拟环境（`.venv`）
+2. 装 PyTorch 2.14.1+cu130（约 3GB）
+3. 装 `requirements.txt` 全部依赖
+4. 从 hf-mirror 下载三个 MOSS-Image 权重（12.1GB，断点续传）
+5. 在桌面生成 `ComfyUI-MOSS-Image.bat`
 
-不想跑部署脚本、只想自己拉权重时，在解压后的目录里依次执行这三条（支持断点续传，中断后重跑同一条即可）：
+之后**双击桌面那个 bat** 就能启动，浏览器自动打开 http://127.0.0.1:8188，工作流模板选 **Text to Image (MOSS-Image)**。
+
+## 分步执行（可选）
+
+只要环境不要模型：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup.ps1 -SkipModels
+```
+
+只下模型（在仓库根目录，三条命令，`-C -` 断点续传，中断后重跑继续）：
 
 ```powershell
 curl.exe -L -C - --retry 10 --retry-delay 5 --retry-all-errors `
@@ -61,36 +47,15 @@ curl.exe -L -C - --retry 10 --retry-delay 5 --retry-all-errors `
   https://hf-mirror.com/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae_small.safetensors
 ```
 
-```bash
-# Git Bash / WSL 版本
-curl -L -C - --retry 10 --retry-delay 5 --retry-all-errors -o models/diffusion_models/moss_image_sft_int8_convrot.safetensors https://hf-mirror.com/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_sft_int8_convrot.safetensors
-curl -L -C - --retry 10 --retry-delay 5 --retry-all-errors -o models/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors https://hf-mirror.com/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors
-curl -L -C - --retry 10 --retry-delay 5 --retry-all-errors -o models/vae/flux2-vae_small.safetensors https://hf-mirror.com/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae_small.safetensors
-```
+核对大小（必须完全一致）：5413698958 / 7343591088 / 249521340。
 
-下载完核对大小（必须完全一致，否则说明没下完）：
+## 仓库内容
 
-```powershell
-Get-Item models\diffusion_models\moss_image_sft_int8_convrot.safetensors, `
-          models\text_encoders\qwen3.5_9b_w4a8_gptq.safetensors, `
-          models\vae\flux2-vae_small.safetensors | Select-Object Name, Length
-# 期望：5413698958 / 7343591088 / 249521340
-```
-
-> `一键部署.bat` 的第 5 步会自动做这三条下载并校验大小，不需要再手动跑。
-
-## 启动
-
-双击 `start_comfyui.bat`，浏览器打开 http://127.0.0.1:8188
-工作流模板选 **Text to Image (MOSS-Image)**。提示词上采样器需要精确文字时 bypass。
-
-## 快照内容
-
-- ComfyUI 源码（1324 个文件，与本机一致，未改动）
-- `user/default/comfy.settings.json` 用户配置
-- `start_comfyui.bat`、`setup.ps1`、`一键部署.bat`
-- `pip-freeze.txt`（84 个包的确切版本）
-- `models/` 占位结构与 configs，不含 12.1GB 权重
+- ComfyUI 源码（1323 个文件，与本机一致，未改动；上游 README 见 `README.comfyui.md`）
+- `user/default/comfy.settings.json`：当前用户配置
+- `setup.ps1`：一键部署脚本；`一键部署.bat`：双击版；`start_comfyui.bat`：前台启动
+- `pip-freeze.txt`：本机 84 个包的确切版本
+- `models/`：目录结构与 configs，不含 12.1GB 权重（由脚本或上面命令下载）
 - 不含 `.venv/`、`output/`、`temp/`、`.git/`
 
 ## 实测参数（RTX 5070 Laptop 8GB，seed 42，batch 1）
@@ -102,18 +67,12 @@ Get-Item models\diffusion_models\moss_image_sft_int8_convrot.safetensors, `
 
 SLG：`single_layers=22`、`start=0`、`end=0.5`，`double_layers` 留空；
 负面提示词 `nsfw, worst quality, bad anatomy, watermark, jpeg artifact`；
-分辨率不超过 1536×1536；显存不足时给 `main.py` 加 `--lowvram`（文本编码器走 CPU）。
+分辨率不超过 1536×1536；OOM 时给 `main.py` 加 `--lowvram`（文本编码器走 CPU）。
 
 ## 模型来源
 
-`https://hf-mirror.com/Comfy-Org/MOSS-Image`（上游 `huggingface.co/Comfy-Org/MOSS-Image`）：
-
-| 路径 | 字节数 |
-|---|---|
-| `models/diffusion_models/moss_image_sft_int8_convrot.safetensors` | 5413698958 |
-| `models/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors` | 7343591088 |
-| `models/vae/flux2-vae_small.safetensors` | 249521340 |
+`https://hf-mirror.com/Comfy-Org/MOSS-Image`（上游 `huggingface.co/Comfy-Org/MOSS-Image`）。
 
 ## 许可
 
-ComfyUI 源码遵循 GPL-3.0；MOSS-Image 权重与代码版权归 OpenMOSS 团队，请遵守上游许可。
+ComfyUI 源码遵循 GPL-3.0（见 `LICENSE`）；MOSS-Image 权重与代码版权归 OpenMOSS 团队，请遵守上游许可。
