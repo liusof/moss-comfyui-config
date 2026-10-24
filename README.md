@@ -18,17 +18,17 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1
 
 ## 分辨率预设
 
-`workflows/` 下有 5 个预设，`setup.ps1` 会自动复制到 `user/default/workflows/`，启动后在 ComfyUI 左侧 **Workflows** 里选。分辨率由工作流里的 `ResolutionSelector` 控制，想自定就改它的 aspect ratio / megapixels。
+`workflows/` 下有 5 个预设，`setup.ps1` 会自动复制到 `user/default/workflows/`，启动后在 ComfyUI 左侧 **Workflows** 里选。分辨率由工作流里的 `ResolutionSelector` 控制，采样固定 **30 steps / CFG 4**、er_sde + simple、SLG 22（0→0.5）、batch 1，想改就直接改对应控件。
 
-| 文件 | 画幅 | 实际分辨率 | 25 steps 耗时 | 峰值显存 |
+| 文件 | 画幅 | 实际分辨率 | 30 steps 耗时 | 峰值显存 |
 |---|---|---|---|---|
-| `1-square-1024` | 1:1 | 1024×1024 | 24.6s | 6832 MB |
-| `2-landscape-1536x864` | 横屏 16:9 | 1536×864 | 32s | 6774 MB |
-| `3-portrait-864x1536` | 竖屏 9:16 | 864×1536 | 33s | 6760 MB |
-| `4-landscape-2k-2048x1152` | 2K 横屏 16:9 | 2048×1152 | 65s | 6920 MB |
-| `5-portrait-2k-1152x2048` | 2K 竖屏 9:16 | 1152×2048 | 65s | 6920 MB |
+| `1-square-1024` | 1:1 | 1024×1024 | 约 30s（首跑 34.8s） | 6798 MB |
+| `2-landscape-1536x864` | 横屏 16:9 | 1536×864 | 38.5s | 6792 MB |
+| `3-portrait-864x1536` | 竖屏 9:16 | 864×1536 | 约 39s | 6792 MB |
+| `4-landscape-2k-2048x1152` | 2K 横屏 16:9 | 2048×1152 | 77.7s | 6984 MB |
+| `5-portrait-2k-1152x2048` | 2K 竖屏 9:16 | 1152×2048 | 约 78s | 6984 MB |
 
-实测环境：RTX 5070 Laptop 8GB、25 steps、CFG 2.5、er_sde/simple、SLG 22（0→0.5）、batch 1。表中耗时不含首次约 27s 的模型加载；2K 在 8GB 上实测可跑（峰值 6.9GB），再往上 1536×1536 以上大概率 OOM。
+实测环境：RTX 5070 Laptop 8GB。首跑多出的几秒是模型加载/编译缓存。2K 在 8GB 上实测可跑（峰值 6.98GB），1536×1536 以上大概率 OOM。
 
 ## 分步执行（可选）
 
@@ -55,13 +55,13 @@ curl.exe -L -C - --retry 10 --retry-delay 5 --retry-all-errors `
 ## 仓库内容
 
 ```
-README.md              本说明
-setup.ps1              一键配置
-一键部署.bat            双击版 setup
-start_comfyui.bat      前台启动
+README.md                    本说明
+setup.ps1                    一键配置
+一键部署.bat                  双击版 setup
+start_comfyui.bat            前台启动
 config/comfy-settings.json   本机 ComfyUI 用户设置
 config/pip-freeze.txt        本机 84 个包的确切版本
-workflows/*.json       5 个分辨率预设（含 MOSS-Image 完整子图）
+workflows/*.json             5 个分辨率预设（含 MOSS-Image 完整子图）
 ```
 
 ComfyUI 源码（1323 个文件）、模型权重、`.venv` 都不入仓库：源码按 commit 拉取，权重按需下载。
@@ -70,11 +70,11 @@ ComfyUI 源码（1323 个文件）、模型权重、`.venv` 都不入仓库：�
 
 | 场景 | steps | CFG | 采样器/调度 | 耗时 |
 |---|---|---|---|---|
-| 日常 | 25 | 2.5 | er_sde / simple | 见上表 |
-| 高质量 | 50 | 3.0 | euler / simple | 约 2 倍 |
+| 日常 | 30 | 4.0 | er_sde / simple | 见上表 |
 
 SLG：`single_layers=22`、`start_percent=0`、`end_percent=0.5`，`double_layers` 留空；
 负面提示词 `nsfw, worst quality, bad anatomy, watermark, jpeg artifact`。
+想更快可降到 25 steps / CFG 2.5，1024² 约 25s；要更高细节再加 steps。
 
 ## 模型来源
 
