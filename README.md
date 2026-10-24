@@ -43,6 +43,42 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1
 - 只要环境和代码、暂不下模型：`.\一键部署.bat` 无法传参，改用 `powershell -ExecutionPolicy Bypass -File .\setup.ps1 -SkipModels`
 - 前置条件：本机已装 Python 3.11（安装时勾选 Add to PATH），Windows 10 1803+ 自带的 `curl.exe`
 
+## 手动下载模型（命令行）
+
+不想跑部署脚本、只想自己拉权重时，在解压后的目录里依次执行这三条（支持断点续传，中断后重跑同一条即可）：
+
+```powershell
+curl.exe -L -C - --retry 10 --retry-delay 5 --retry-all-errors `
+  -o models\diffusion_models\moss_image_sft_int8_convrot.safetensors `
+  https://hf-mirror.com/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_sft_int8_convrot.safetensors
+
+curl.exe -L -C - --retry 10 --retry-delay 5 --retry-all-errors `
+  -o models\text_encoders\qwen3.5_9b_w4a8_gptq.safetensors `
+  https://hf-mirror.com/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors
+
+curl.exe -L -C - --retry 10 --retry-delay 5 --retry-all-errors `
+  -o models\vae\flux2-vae_small.safetensors `
+  https://hf-mirror.com/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae_small.safetensors
+```
+
+```bash
+# Git Bash / WSL 版本
+curl -L -C - --retry 10 --retry-delay 5 --retry-all-errors -o models/diffusion_models/moss_image_sft_int8_convrot.safetensors https://hf-mirror.com/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_sft_int8_convrot.safetensors
+curl -L -C - --retry 10 --retry-delay 5 --retry-all-errors -o models/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors https://hf-mirror.com/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors
+curl -L -C - --retry 10 --retry-delay 5 --retry-all-errors -o models/vae/flux2-vae_small.safetensors https://hf-mirror.com/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae_small.safetensors
+```
+
+下载完核对大小（必须完全一致，否则说明没下完）：
+
+```powershell
+Get-Item models\diffusion_models\moss_image_sft_int8_convrot.safetensors, `
+          models\text_encoders\qwen3.5_9b_w4a8_gptq.safetensors, `
+          models\vae\flux2-vae_small.safetensors | Select-Object Name, Length
+# 期望：5413698958 / 7343591088 / 249521340
+```
+
+> `一键部署.bat` 的第 5 步会自动做这三条下载并校验大小，不需要再手动跑。
+
 ## 启动
 
 双击 `start_comfyui.bat`，浏览器打开 http://127.0.0.1:8188
