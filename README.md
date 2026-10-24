@@ -1,7 +1,6 @@
 # moss-comfyui-config
 
-ComfyUI `0.42.0`（commit `bc5f880`）+ MOSS-Image 量化权重的完整配置仓库，8GB 显存笔记本实测可用。
-`git clone` 下来就是完整源码树，跑一条命令完成环境与模型，最后双击桌面图标启动。
+ComfyUI `0.42.0`（commit `bc5f880`）+ MOSS-Image 量化权重的**配置仓库**：仓库里只有脚本、配置和 5 个分辨率工作流，ComfyUI 源码由 `setup.ps1` 按固定 commit 拉取，clone 完跑一条命令就完成环境与模型。
 
 ## 三行命令
 
@@ -11,27 +10,31 @@ cd moss-comfyui-config
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
-私有库需要认证：把 URL 换成 `https://<用户名>:<PAT>@github.com/liusof/moss-comfyui-config.git`，或先加为协作者。
+私有库需认证：`https://<用户名>:<PAT>@github.com/liusof/moss-comfyui-config.git`。
 
-执行完会：
+`setup.ps1` 依次完成：拉取 ComfyUI 源码（经 `gh-proxy.com`，可用 `-SourceProxy` 换镜像）→ 复制配置与工作流 → 建 `.venv` → 装 torch 2.14.1+cu130 与依赖 → 下载 12.1GB 权重 → 在桌面生成 `ComfyUI-MOSS-Image.bat`。
 
-1. 建 Python 3.11 虚拟环境（`.venv`）
-2. 装 PyTorch 2.14.1+cu130（约 3GB）
-3. 装 `requirements.txt` 全部依赖
-4. 从 hf-mirror 下载三个 MOSS-Image 权重（12.1GB，断点续传）
-5. 在桌面生成 `ComfyUI-MOSS-Image.bat`
+之后**双击桌面 bat** 启动，浏览器自动开 http://127.0.0.1:8188。
 
-之后**双击桌面那个 bat** 就能启动，浏览器自动打开 http://127.0.0.1:8188，工作流模板选 **Text to Image (MOSS-Image)**。
+## 分辨率预设
+
+`workflows/` 下有 5 个预设，`setup.ps1` 会自动复制到 `user/default/workflows/`，启动后在 ComfyUI 左侧 **Workflows** 里选。分辨率由工作流里的 `ResolutionSelector` 控制，想自定就改它的 aspect ratio / megapixels。
+
+| 文件 | 画幅 | 实际分辨率 | 25 steps 耗时 | 峰值显存 |
+|---|---|---|---|---|
+| `1-square-1024` | 1:1 | 1024×1024 | 24.6s | 6832 MB |
+| `2-landscape-1536x864` | 横屏 16:9 | 1536×864 | 32s | 6774 MB |
+| `3-portrait-864x1536` | 竖屏 9:16 | 864×1536 | 33s | 6760 MB |
+| `4-landscape-2k-2048x1152` | 2K 横屏 16:9 | 2048×1152 | 65s | 6920 MB |
+| `5-portrait-2k-1152x2048` | 2K 竖屏 9:16 | 1152×2048 | 65s | 6920 MB |
+
+实测环境：RTX 5070 Laptop 8GB、25 steps、CFG 2.5、er_sde/simple、SLG 22（0→0.5）、batch 1。表中耗时不含首次约 27s 的模型加载；2K 在 8GB 上实测可跑（峰值 6.9GB），再往上 1536×1536 以上大概率 OOM。
 
 ## 分步执行（可选）
 
-只要环境不要模型：
+只装环境不下模型：`setup.ps1 -SkipModels`；不生成桌面启动器：`-NoDesktopShortcut`。
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\setup.ps1 -SkipModels
-```
-
-只下模型（在仓库根目录，三条命令，`-C -` 断点续传，中断后重跑继续）：
+只下模型（仓库根目录，断点续传）：
 
 ```powershell
 curl.exe -L -C - --retry 10 --retry-delay 5 --retry-all-errors `
@@ -47,27 +50,31 @@ curl.exe -L -C - --retry 10 --retry-delay 5 --retry-all-errors `
   https://hf-mirror.com/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae_small.safetensors
 ```
 
-核对大小（必须完全一致）：5413698958 / 7343591088 / 249521340。
+核对大小：5413698958 / 7343591088 / 249521340。
 
 ## 仓库内容
 
-- ComfyUI 源码（1323 个文件，与本机一致，未改动；上游 README 见 `README.comfyui.md`）
-- `user/default/comfy.settings.json`：当前用户配置
-- `setup.ps1`：一键部署脚本；`一键部署.bat`：双击版；`start_comfyui.bat`：前台启动
-- `pip-freeze.txt`：本机 84 个包的确切版本
-- `models/`：目录结构与 configs，不含 12.1GB 权重（由脚本或上面命令下载）
-- 不含 `.venv/`、`output/`、`temp/`、`.git/`
+```
+README.md              本说明
+setup.ps1              一键配置
+一键部署.bat            双击版 setup
+start_comfyui.bat      前台启动
+config/comfy-settings.json   本机 ComfyUI 用户设置
+config/pip-freeze.txt        本机 84 个包的确切版本
+workflows/*.json       5 个分辨率预设（含 MOSS-Image 完整子图）
+```
 
-## 实测参数（RTX 5070 Laptop 8GB，seed 42，batch 1）
+ComfyUI 源码（1323 个文件）、模型权重、`.venv` 都不入仓库：源码按 commit 拉取，权重按需下载。
 
-| 场景 | 分辨率 | steps | CFG | 采样器/调度 | 耗时 | 峰值显存 |
-|---|---|---|---|---|---|---|
-| 日常 | 1024×1024 | 25 | 2.5 | er_sde / simple | 24.6s | 6832 MB |
-| 高质量 | 1024×1024 | 50 | 3.0 | euler / simple | 48.1s | 6674 MB |
+## 生成参数
 
-SLG：`single_layers=22`、`start=0`、`end=0.5`，`double_layers` 留空；
-负面提示词 `nsfw, worst quality, bad anatomy, watermark, jpeg artifact`；
-分辨率不超过 1536×1536；OOM 时给 `main.py` 加 `--lowvram`（文本编码器走 CPU）。
+| 场景 | steps | CFG | 采样器/调度 | 耗时 |
+|---|---|---|---|---|
+| 日常 | 25 | 2.5 | er_sde / simple | 见上表 |
+| 高质量 | 50 | 3.0 | euler / simple | 约 2 倍 |
+
+SLG：`single_layers=22`、`start_percent=0`、`end_percent=0.5`，`double_layers` 留空；
+负面提示词 `nsfw, worst quality, bad anatomy, watermark, jpeg artifact`。
 
 ## 模型来源
 
@@ -75,4 +82,4 @@ SLG：`single_layers=22`、`start=0`、`end=0.5`，`double_layers` 留空；
 
 ## 许可
 
-ComfyUI 源码遵循 GPL-3.0（见 `LICENSE`）；MOSS-Image 权重与代码版权归 OpenMOSS 团队，请遵守上游许可。
+ComfyUI 源码遵循 GPL-3.0；MOSS-Image 权重与代码版权归 OpenMOSS 团队，请遵守上游许可。
