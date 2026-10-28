@@ -45,15 +45,30 @@ if (Test-Up) {
     if (-not (Test-Path (Join-Path $Root 'main.py'))) { Say FAIL "找不到 main.py：$Root（先跑 setup.ps1，或用 -Root 指定安装目录）"; exit 1 }
     if (-not (Test-Path $py)) { Say FAIL "找不到 .venv\Scripts\python.exe：$Root"; exit 1 }
     Say INFO '拉 ComfyUI 服务…'
-    $proc = Start-Process -FilePath $py -ArgumentList 'main.py', '--listen', '127.0.0.1', '--port', $Port -WorkingDirectory $Root -PassThru
+    # 把服务输出落到日志文件：启动失败时只有日志能说明原因
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $logOut = Join-Path $Root "comfyui-$stamp.out.log"
+    $logErr = Join-Path $Root "comfyui-$stamp.err.log"
+    $proc = Start-Process -FilePath $py -ArgumentList 'main.py', '--listen', '127.0.0.1', '--port', $Port -WorkingDirectory $Root -PassThru -RedirectStandardOutput $logOut -RedirectStandardError $logErr
     $owned = $true
     $t0 = Get-Date
     while (((Get-Date) - $t0).TotalSeconds -lt 300) {
-        if ($proc.HasExited) { Say FAIL "服务启动即退出，rc=$($proc.ExitCode)"; exit 1 }
+        if ($proc.HasExited) {
+            Say FAIL "服务启动即退出，rc=$($proc.ExitCode)"
+            Say INFO "日志：$logErr"
+            if (Test-Path $logErr) { Get-Content $logErr -Tail 30 | ForEach-Object { Say INFO "  $_" } }
+            exit 1
+        }
         if (Test-Up) { break }
         Start-Sleep -Seconds 2
     }
-    if (-not (Test-Up)) { Say FAIL '300s 内服务未就绪'; if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }; exit 1 }
+    if (-not (Test-Up)) {
+        Say FAIL '300s 内服务未就绪'
+        Say INFO "日志：$logErr"
+        if (Test-Path $logErr) { Get-Content $logErr -Tail 30 | ForEach-Object { Say INFO "  $_" } }
+        if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+        exit 1
+    }
     Say OK ("服务就绪，用时 {0:N0}s" -f ((Get-Date) - $t0).TotalSeconds)
 }
 
@@ -151,6 +166,15 @@ try {
     $done = $null
     while (((Get-Date) - $t1).TotalSeconds -lt 1800) {
         Start-Sleep -Seconds 5
+        # 服务中途死掉时必须立刻报出来，否则会在轮询里空转到 30 分钟
+        if ($owned -and $proc -and $proc.HasExited) {
+            Say FAIL "服务在采样过程中退出，rc=$($proc.ExitCode)（已跑 $([math]::Round(((Get-Date) - $t1).TotalSeconds))s）"
+            if (Test-Path $logErr) {
+                Say INFO "日志尾部：$logErr"
+                Get-Content $logErr -Tail 25 | ForEach-Object { Say INFO "  $_" }
+            }
+            exit 1
+        }
         try { $h = Invoke-RestMethod "$base/history/$qid" -TimeoutSec 20 } catch { continue }
         if ($h.PSObject.Properties.Name -contains $qid) { $done = $h.$qid; break }
         $el = [math]::Round(((Get-Date) - $t1).TotalSeconds)

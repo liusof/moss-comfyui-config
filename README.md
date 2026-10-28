@@ -22,7 +22,18 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1
 
 私有库需认证：`https://<用户名>:<PAT>@github.com/liusof/moss-comfyui-config.git`。
 
-`setup.ps1` 依次完成：拉取 ComfyUI 源码（`Comfy-Org/ComfyUI@355cd6b1`，经 `gh-proxy.com`，可用 `-SourceProxy` 换镜像）→ 复制配置与工作流 → 建 `.venv` → 装 torch 2.14.1+cu130 与依赖 → 下载 12.1GB 权重 → 在桌面生成 `ComfyUI-MOSS-Image.bat`。
+`setup.ps1` 依次完成：拉取 ComfyUI 源码（`Comfy-Org/ComfyUI@355cd6b1`，多源轮询 `gh-proxy.com` → `codeload.github.com` → `github.com`）→ 复制配置与工作流 → 建 `.venv` → 装 torch 2.14.1+cu130 与依赖 → 下载 12.1GB 权重 → 在桌面生成 `ComfyUI-MOSS-Image.bat`。
+
+源码下载这一步有三个坑，脚本已经处理掉：
+
+- GitHub archive **不支持 HTTP Range**（`-r` 被忽略，`curl -C -` 直接报 `curl: (33) HTTP server does not seem to support byte ranges`）。所以源码**不能续传**，只能每轮删掉残留、全新下载，再用 `tar -tzf` 校验完整性，不完整就换源重试。
+- ComfyUI 源码目录里带 `models/`、`output/`、`user/` 等目录。若目标已存在同名目录，**`Move-Item` 会直接报 `Cannot create a file when that file already exists`**——脚本改用 `Copy-Item` 合并式落盘，已有的权重文件不会被覆盖。
+- `tar` 校验包完整性时必然会把报错写进 stderr，而 PowerShell 在 `$ErrorActionPreference='Stop'` 下会把 native 命令的 stderr 判成 `NativeCommandError` 直接中断脚本。脚本用 `Invoke-Native` 把 stderr 降级成普通输出再判断。
+
+权重下载还有两个坑：
+
+- **HuggingFace 仓库根下没有 `models/` 这一层**。权重在本地落到 `models\vae\...`，但在 HF 上是 `vae/...`。URL 拼错会拿到 **HTTP 404 + 15 字节纯文本 `Entry not found`**，而 `curl` 对 404 仍然 exit 0——脚本会因为"下载成功"留下一个 15 字节的垃圾文件，ComfyUI 加载时才报模型损坏。脚本把本地路径和 HF 路径分成 `Path` / `HfPath` 两个字段，并按字节数校验。
+- 权重走 `hf-mirror` **支持 Range**，所以可以续传；但**小于 1MB 的残片一定是错误页**（`Entry not found` 只有 15 字节），拿它续传只会产出永远不完整的坏文件。脚本见到这种残片先删掉再下。镜像按 `hf-mirror.com` → `huggingface.co` 顺序回退，用 `-HfBase` 可换。
 
 之后**双击桌面 bat** 启动，浏览器自动开 http://127.0.0.1:8188 。
 
@@ -60,7 +71,11 @@ powershell -ExecutionPolicy Bypass -File .\verify_chain.ps1
 
 ## 分步执行（可选）
 
-只装环境不下模型：`setup.ps1 -SkipModels`；不生成桌面启动器：`-NoDesktopShortcut`；用精确版本复现（`config/pip-freeze.txt`）：`-UseFreeze`；Python 不在 PATH 或路径特殊：`-PythonExe 'D:\Python311\python.exe'`。
+只装环境不下模型：`setup.ps1 -SkipModels`；不生成桌面启动器：`-NoDesktopShortcut`；用精确版本复现（`config/pip-freeze.txt`）：`-UseFreeze`；Python 不在 PATH 或路径特殊：`-PythonExe 'D:\Python311\python.exe'`；换源码镜像：`-SourceProxy 'https://ghfast.top'`；换权重镜像：`-HfBase 'https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main'`；换 torch 镜像顺序：`-TorchMirrors 'https://mirror.nju.edu.cn/pytorch/whl/cu130','https://download.pytorch.org/whl/cu130'`。
+
+`-UseFreeze` 会用 `pip install -r config/pip-freeze.txt --index-url https://download.pytorch.org/whl/cu130 --extra-index-url https://pypi.org/simple`。两个索引都要给：freeze 里写的是 `torch==2.14.1+cu130`，这个带本地版本号的包只在 pytorch 索引里有（PyPI 上没有），而其余 80 多个包只在 PyPI 上。
+
+`setup.ps1` 会在装完依赖后，按**实际装到的** `comfyui-frontend-package` 版本回写 `user/default/comfy.settings.json` 里的 `Comfy.InstalledVersion`（这个值是"首次安装时运行的前端版本"，前端用它做版本化默认值）。默认走 `requirements.txt` 装的是前端 `1.55.18`，走 `-UseFreeze` 是 `1.57.1`，仓库里原本硬编码的 `1.57.1` 与默认路径对不上。
 
 只下模型（仓库根目录，断点续传）：
 
@@ -93,7 +108,7 @@ config/pip-freeze.txt        本机 84 个包的确切版本（配合 -UseFreeze
 workflows/*.json             5 个分辨率预设（含 MOSS-Image 完整子图）
 ```
 
-ComfyUI 源码（1302 个文件）、模型权重、`.venv` 都不入仓库：源码按 commit 拉取，权重按需下载。
+ComfyUI 源码（1302 个文件）、模型权重、`.venv` 都不入仓库：源码按 commit 拉取，权重按需下载。部署后目录里会多出 `README.comfyui.md`（上游 README 改名保存，避免盖掉本仓库的）、合并后的 `.gitignore`、`user/default/`（配置与工作流的落地位置）。
 
 ## 生成参数
 
@@ -120,11 +135,17 @@ ComfyUI 源码 pin 在 `Comfy-Org/ComfyUI@355cd6b14c92c19ac3188fe528e47a3f21ef51
 
 ## 常见问题
 
-**源码下载失败 / 解压失败**：GitHub archive 经代理经常传到一半就断，而 `curl` 对"HTTP 200 但流被切断"不报错。脚本已用 `-C -` 多轮续传 + `tar -tzf` 完整性校验兜住；若六轮仍不完整，手动 `git clone --depth 1 https://github.com/Comfy-Org/ComfyUI.git` 后把内容拷到本目录。
+**源码下载失败 / 解压失败**：GitHub archive 经代理经常传到一半就断，而 `curl` 对"HTTP 200 但流被切断"不报错。脚本按 `gh-proxy.com` → `codeload.github.com` → `github.com` 三个源轮询，每轮删除残留、全新下载（**archive 不支持 Range，续传无效**），用 `tar -tzf` 校验完整性，不完整则重试（最多 6 轮）。若仍失败，手动 `git clone --depth 1 https://github.com/Comfy-Org/ComfyUI.git` 后把内容拷到本目录，或用 `-SourceProxy` 换镜像。
+
+**`.gitignore` 被 ComfyUI 覆盖**：脚本把上游 `.gitignore`（含 `/models/`、`/output/`、`/input/`、`/user/`、`.venv/`、`/custom_nodes/`）与仓库自己的规则做**并集合并**后再落盘，不会覆盖掉仓库侧的规则。
 
 **提示编码乱码 / 中文变问号**：脚本是 UTF-8 with BOM；若被编辑器改成无 BOM，Windows PowerShell 5.1 会按 ANSI 解析中文。用 VS Code 另存为 "UTF-8 with BOM"。
 
 **跑起来 OOM**：给启动命令加 `--lowvram`（编辑桌面 `ComfyUI-MOSS-Image.bat`，在 `main.py` 后追加），或先用 `-CheckOnly` 确认不是权重损坏。
+
+**权重下载到一半就停了 / 报"下载不完整"**：多半是镜像连接被重置（`curl: (56) Recv failure: Connection was reset`）。直接重跑 `setup.ps1` 即可续传；想换源加 `-HfBase`。脚本也会自动在 `hf-mirror.com` 和 `huggingface.co` 之间回退。
+
+**模型加载报文件损坏**：检查 `models\vae\flux2-vae_small.safetensors` 是不是 15 字节——那是 HF 的 404 错误页（`Entry not found`），不是权重。删掉重跑脚本即可。
 
 ## 模型来源
 
